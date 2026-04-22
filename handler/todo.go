@@ -15,7 +15,7 @@ type TodoHandler struct {
 	store *store.TodoStore
 }
 
-func NewTodoHandler(s *store.TodoStore) *TodoHandler{
+func NewTodoHandler(s *store.TodoStore) *TodoHandler {
 	return &TodoHandler{
 		store: s,
 	}
@@ -37,7 +37,7 @@ func (h *TodoHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TodoHandler) Get(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path					// "/todos/123"
+	path := r.URL.Path // "/todos/123"
 	parts := strings.Split(path, "/")
 	id := parts[2]
 
@@ -51,7 +51,7 @@ func (h *TodoHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Title     string 	`json:"title"`
+		Title string `json:"title"`
 	}
 
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -66,10 +66,10 @@ func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	todo := model.Todo{
-		ID:			uuid.NewString(),
-		Title:		req.Title,
-		Status: 	model.StatusTodo,
-		CreatedAt: 	time.Now(),
+		ID:        uuid.NewString(),
+		Title:     req.Title,
+		Status:    model.StatusTodo,
+		CreatedAt: time.Now(),
 	}
 
 	created := h.store.Create(todo)
@@ -81,9 +81,9 @@ func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(path, "/")
 	id := parts[2]
 
-	var req struct{
-		Title     string 	`json:"title"`
-		Status    string 	`json:"status"`
+	var req struct {
+		Title  string `json:"title"`
+		Status string `json:"status"`
 	}
 
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -99,12 +99,12 @@ func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	todo := model.Todo{
-		ID:			id,
-		Title:		req.Title,
-		Status: 	req.Status,
-		CreatedAt: 	existing.CreatedAt,
+		ID:        id,
+		Title:     req.Title,
+		Status:    req.Status,
+		CreatedAt: existing.CreatedAt,
 	}
-	
+
 	updated, err := h.store.Update(todo)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())

@@ -1,17 +1,17 @@
 package store
 
 import (
-	"sync"
 	"errors"
-	
+	"sync"
+
 	"github.com/Adityaraj-star/todo-api/model"
 )
 
 var ErrNotFound = errors.New("todo not found")
 
 type TodoStore struct {
-	todos 	map[string]model.Todo
-	mu 		sync.Mutex
+	todos map[string]model.Todo
+	mu    sync.Mutex
 }
 
 func NewTodoStore() *TodoStore {
@@ -62,7 +62,7 @@ func (r *TodoStore) Update(todo model.Todo) (model.Todo, error) {
 	if !ok {
 		return model.Todo{}, ErrNotFound
 	}
-	
+
 	r.todos[todo.ID] = todo
 	return todo, nil
 }
