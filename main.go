@@ -3,44 +3,62 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/go-chi/chi/v5"
+
+	"github.com/Adityaraj-star/todo-api/auth"
+	"github.com/Adityaraj-star/todo-api/db"
 	"github.com/Adityaraj-star/todo-api/handler"
 	"github.com/Adityaraj-star/todo-api/middleware"
 	"github.com/Adityaraj-star/todo-api/store"
 )
 
 func main() {
-	todoStore := store.NewTodoStore()
+	auth.RequireJWTSecret() 
+	
+	var todoStore store.TodoStore
+	var userStore store.UserStore
+
+
+	if os.Getenv("STORE") == "memory" {
+		log.Println("using in-memory store")
+		todoStore = store.NewMemoryTodoStore()
+		userStore = store.NewMemoryUserStore()
+	} else {
+		conn, err := db.Connect()
+		if err != nil {
+			log.Fatalf("failed to connect to db: %v", err)
+		}
+		defer conn.Close()
+
+		if err := db.Migrate(conn); err != nil {
+			log.Fatalf("failed to run migrations: %v", err)
+		}
+
+		log.Println("using postgres store")
+		todoStore = store.NewPostgresTodoStore(conn)
+		userStore = store.NewPostgresUserStore(conn)
+	}
+	
 	todoHandler := handler.NewTodoHandler(todoStore)
+	authHandler := handler.NewAuthHandler(userStore)
 
-	mux := http.NewServeMux()
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
 
-	mux.HandleFunc("/todos", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			todoHandler.List(w, r)
-		case http.MethodPost:
-			todoHandler.Create(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
+	r.Post("/register", authHandler.Register)
+	r.Post("/login", authHandler.Login)
+
+	r.Route("/todos", func(r chi.Router) {
+		r.Use(middleware.RequireAuth)
+		r.Get("/", todoHandler.List)
+		r.Post("/", todoHandler.Create)
+		r.Get("/{id}", todoHandler.Get)
+		r.Put("/{id}", todoHandler.Update)
+		r.Delete("/{id}", todoHandler.Delete)
 	})
-
-	mux.HandleFunc("/todos/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			todoHandler.Get(w, r)
-		case http.MethodPut:
-			todoHandler.Update(w, r)
-		case http.MethodDelete:
-			todoHandler.Delete(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	loggedMux := middleware.Logger(mux)
 
 	log.Println("server running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", loggedMux))
+	log.Fatal(http.ListenAndServe(":8080", r))
 }

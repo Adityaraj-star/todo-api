@@ -3,19 +3,22 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
+	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
+	"github.com/Adityaraj-star/todo-api/middleware"
 	"github.com/Adityaraj-star/todo-api/model"
 	"github.com/Adityaraj-star/todo-api/store"
-	"github.com/google/uuid"
 )
 
 type TodoHandler struct {
-	store *store.TodoStore
+	store store.TodoStore
 }
 
-func NewTodoHandler(s *store.TodoStore) *TodoHandler {
+func NewTodoHandler(s store.TodoStore) *TodoHandler {
 	return &TodoHandler{
 		store: s,
 	}
@@ -31,97 +34,153 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
+func userID(r *http.Request) (string, bool) {
+	return middleware.UserIDFromContext(r.Context())
+}
+
 func (h *TodoHandler) List(w http.ResponseWriter, r *http.Request) {
-	todos := h.store.GetAll()
+	uid, ok := userID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	q := r.URL.Query()
+	params := store.ListParams{
+		Status: q.Get("status"),
+	}
+	if limit, err := strconv.Atoi(q.Get("limit")); err == nil {
+		params.Limit = limit
+	}
+	if offset, err := strconv.Atoi(q.Get("offset")); err == nil {
+		params.Offset = offset
+	}
+
+	todos, err := h.store.GetAll(uid, params)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch todos")
+		return
+	}
 	writeJSON(w, http.StatusOK, todos)
 }
 
 func (h *TodoHandler) Get(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path // "/todos/123"
-	parts := strings.Split(path, "/")
-	id := parts[2]
+	uid, ok := userID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id := chi.URLParam(r, "id")
 
-	todo, err := h.store.GetByID(id)
-	if err != nil {
+	todo, err := h.store.GetByID(id, uid)
+	if err == store.ErrNotFound {
 		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch todo")
 		return
 	}
 	writeJSON(w, http.StatusOK, todo)
 }
 
 func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Title string `json:"title"`
-	}
-
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+	uid, ok := userID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	if req.Title == "" {
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
 		return
 	}
 
 	todo := model.Todo{
 		ID:        uuid.NewString(),
+		UserID:    uid,
 		Title:     req.Title,
 		Status:    model.StatusTodo,
 		CreatedAt: time.Now(),
 	}
 
-	created := h.store.Create(todo)
+	created, err := h.store.Create(todo)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create todo")
+		return
+	}
 	writeJSON(w, http.StatusCreated, created)
 }
 
 func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	id := parts[2]
+	uid, ok := userID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id := chi.URLParam(r, "id")
 
 	var req struct {
 		Title  string `json:"title"`
 		Status string `json:"status"`
 	}
-
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	existing, err := h.store.GetByID(id)
-	if err != nil {
+	existing, err := h.store.GetByID(id, uid)
+	if err == store.ErrNotFound {
 		writeError(w, http.StatusNotFound, "todo not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch todo")
 		return
 	}
 
 	todo := model.Todo{
 		ID:        id,
+		UserID:    uid,
 		Title:     req.Title,
 		Status:    req.Status,
 		CreatedAt: existing.CreatedAt,
 	}
 
 	updated, err := h.store.Update(todo)
-	if err != nil {
+	if err == store.ErrNotFound {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update todo")
+		return
+	}
 	writeJSON(w, http.StatusOK, updated)
 }
 
 func (h *TodoHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	id := parts[2]
+	uid, ok := userID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id := chi.URLParam(r, "id")
 
-	err := h.store.Delete(id)
-	if err != nil {
+	err := h.store.Delete(id, uid)
+	if err == store.ErrNotFound {
 		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete todo")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
