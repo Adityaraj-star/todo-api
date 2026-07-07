@@ -215,7 +215,7 @@ Tests spin up the real chi router (same wiring as `main.go`) against in-memory s
 
 ---
 
-## Design decisions worth explaining out loud
+## Design decisions
 
 **Why an interface for storage instead of just using `*sql.DB` directly in handlers?**
 Two reasons: testability (no database needed for tests) and the ability to swap backends later without a rewrite. It also just forces cleaner separation between "how do I store this" and "how do I respond to this HTTP request" — those are genuinely different concerns.
