@@ -1,0 +1,22 @@
+# Compiled binaries
+todo-api
+todo-api-bin
+*.exe
+*.test
+*.out
+ 
+# Environment files — never commit real secrets
+.env
+.env.local
+ 
+# Go build/test cache
+/bin/
+/dist/
+ 
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+ 
+# OS files
+.DS_Store
