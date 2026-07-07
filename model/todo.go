@@ -10,6 +10,7 @@ const (
 
 type Todo struct {
 	ID        string    `json:"id"`
+	UserID    string    `json:"-"`
 	Title     string    `json:"title"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
